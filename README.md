@@ -15,11 +15,11 @@ returns plaintext hash response (delay might be quite long for a large file)
 `POST
 /jobs/submit`
 
-{ secret_key:"security", 
+`{ secret_key:"security", 
 target:"/regular/path/to/file", 
 type:"md5", 
 data: "{\"some\":\"optional stringified json data you'd like to store against this job\"}"
-}
+}`
 
 returns 201 if the job submission is successful
 returns 409 if that path has already been checksummed

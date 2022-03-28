@@ -11,7 +11,8 @@ const cors = require('cors');
 const sqlite3 = require("sqlite3").verbose();
 
 // This'll stop 'em.
-const secret_key = "security";
+const secret_key = process.env.SECRET_KEY || "security";
+const service_port = 80;
 
 let db = new sqlite3.Database('./data.db', sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, err => {
 
@@ -211,11 +212,13 @@ function serviceLoop() {
       console.error(err);
     } else {
       pending_jobs = jobs.length;
+      console.log(`${pending_jobs} jobs in queue`);
       db.all(`SELECT * FROM jobs WHERE status = 'processing' ORDER BY queue_time DESC LIMIT 256`, (err, jobs) => {
         if (err) {
           console.error(err);
         } else {
           processing_jobs = jobs.length;
+          console.log(`${processing_jobs} jobs processing`);
         }
       });
 
@@ -257,10 +260,8 @@ function serviceLoop() {
     console.log("Running service loop");
     console.log(niceDate());
     console.log(`${job_slots} job slots Available`);
-    console.log(`${pending_jobs} jobs in queue`);
-    console.log(`${processing_jobs} jobs processing`);
     serviceLoop();
   }, 5000);
 }
 
-app.listen(80, () => { console.log("Ready for MD5s..."); serviceLoop(); });
+app.listen(service_port, () => { console.log("Welcome to Checkwell"); serviceLoop(); });

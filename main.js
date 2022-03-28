@@ -8,8 +8,9 @@ const e = require("express");
 const app = express();
 const fs = require('fs');
 const sqlite3 = require("sqlite3").verbose();
-const secret_key = "security";
 
+// This'll stop 'em.
+const secret_key = "security";
 
 let db = new sqlite3.Database('./data.db', sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, err => {
 
@@ -58,7 +59,7 @@ router.get("/style.css", (req, res) => {
 });
 
 
-router.get("/justGetMD5", (request, response) => {
+router.get("/md5", (request, response) => {
   if (!request.query.secret_key || request.query.secret_key != secret_key) {
     response.send("Sorry!");
     return false;
@@ -81,7 +82,7 @@ router.post("/jobs/submit", jsonParser, (req, res) => {
   const data = req.body.data;
 
   let sql = data ? `INSERT INTO jobs (path, type, user_data) VALUES (?, ?, ?)` : `INSERT INTO jobs (path, type) VALUES (?, ?)`;
-  let params = data ? [target, type, data] : [target, type];
+  let params = data ? [target, type, JSON.stringify(data)] : [target, type];
 
   db.run(sql, params, err => {
     if (err) { console.error(err); res.status(500).send({ message: "Database error." }) } else {

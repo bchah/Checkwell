@@ -6,9 +6,9 @@ This must be run from a location where NodeJS can see the paths as they are bein
 All requests require a secret key which you can set to whatever you'd like in the code (this is v0.0.1 folks.)
 
 `GET
-/justGetMD5?secret_key=security&target=/uriencoded/path/to/file`
+/md5?secret_key=security&target=/uriencoded/path/to/file`
 
-returns plaintext hash response (delay might be quite long for a large file)
+skips the database and just returns a plaintext hash response (delay might be quite long for a large file)
 
 `POST
 /jobs/submit`
@@ -16,7 +16,7 @@ returns plaintext hash response (delay might be quite long for a large file)
 `{ secret_key:"security", 
 target:"/regular/path/to/file", 
 type:"md5", 
-data: "{\"some\":\"optional stringified json data you'd like to store against this job\"}"
+data: {"some":"custom json data you want to store against this job"}
 }`
 
 returns 201 if the job submission is successful<br/>

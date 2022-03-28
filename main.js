@@ -79,11 +79,12 @@ router.post("/jobs/submit", jsonParser, (req, res) => {
     res.send("Sorry!");
     return false;
   }
-  const items = req.body.items || null;
+  let items = req.body.items || null;
 
   if (items) {
 
     for (let i = 0; i < items.length; i++) {
+
       const target = items[i].target;
       const type = items[i].type || "md5";
       const data = items[i].data;
@@ -94,6 +95,7 @@ router.post("/jobs/submit", jsonParser, (req, res) => {
         if (err) { console.error(err); res.status(500).send({ message: "Database error." }) } else {
         }
       });
+
       if (i == items.length - 1) {
         res.status(201).send({ message: `Queued ${items.length} jobs` });
       }
@@ -125,14 +127,14 @@ router.get("/jobs/complete", (request, response) => {
   }
   let completed_jobs = [];
 
-  let sql = `SELECT * FROM jobs WHERE status = ? ORDER BY id DESC LIMIT 10000`;
-  let params = ["complete"]
+  let sql = `SELECT * FROM jobs WHERE status IN ("complete","failed") ORDER BY id DESC LIMIT 10000`;
+  let params = [];
   if (request.query.id) {
-    sql = `SELECT * FROM jobs WHERE status = ? AND id = ? ORDER BY id DESC LIMIT 10000`;
-    params = ["complete", request.query.id];
+    sql = `SELECT * FROM jobs WHERE status IN ("complete","failed") AND id = ? ORDER BY id DESC LIMIT 10000`;
+    params = [request.query.id];
   } else if (request.query.target) {
-    sql = `SELECT * FROM jobs WHERE status = ? AND path LIKE ? ORDER BY id DESC LIMIT 10000`;
-    params = ["complete", `${request.query.target}%`];
+    sql = `SELECT * FROM jobs WHERE status IN ("complete","failed") AND path LIKE ? ORDER BY id DESC LIMIT 10000`;
+    params = [`${request.query.target}%`];
   }
 
   db.all(sql, params, (err, jobs) => {
@@ -216,27 +218,40 @@ function serviceLoop() {
           processing_jobs = jobs.length;
         }
       });
+
       jobs.forEach(job => {
         if (!currentJobs.find(cJob => { cJob.id == job.id })) {
-          currentJobs.push(job);
+          if (job.status != "failed") { currentJobs.push(job) }
+          else {
+            currentJobs = currentJobs.filter(cJob => { cJob.id != job.id });
+            return;
+          }
           console.log(`Starting Job ${job.id}: ${job.path}`);
           db.run(`UPDATE jobs SET status = ?, start_time = ? WHERE id = ?`, ["processing", niceDate(), job.id], err => {
             if (err) {
               console.error(err);
             } else {
-              md5File(job.path).then((hash) => {
-                console.log(`${job.path} ==> ${hash}`);
-                db.run(`UPDATE jobs SET status = ?, result = ?, finish_time = ? WHERE id = ?`, ["complete", hash, niceDate(), job.id], err => {
-                  if (err) { console.error(err) };
+                md5File(job.path).then((hash) => {
+                  console.log(`${job.path} ==> ${hash}`);
+                  db.run(`UPDATE jobs SET status = ?, result = ?, finish_time = ? WHERE id = ?`, ["complete", hash, niceDate(), job.id], err => {
+                    if (err) { console.error(err) };
+                    currentJobs = currentJobs.filter(cJob => { cJob.id != job.id });
+                  });
+                  
+                }, (err)=>{
+                  console.error(err);
+                  db.run(`UPDATE jobs SET status = ?, finish_time = ? WHERE id = ?`, ["failed", niceDate(), job.id], err => {
+                    if (err) { console.error(err) };
+                    currentJobs = currentJobs.filter(cJob => { cJob.id != job.id });
+                  });
                 });
-                currentJobs = currentJobs.filter(cJob => { cJob.id != job.id });
-              });
             }
           });
         }
       });
     }
   });
+
   setTimeout(() => {
     job_slots = coreCount - currentJobs.length;
     console.log("Running service loop");
@@ -244,7 +259,8 @@ function serviceLoop() {
     console.log(`${job_slots} job slots Available`);
     console.log(`${pending_jobs} jobs in queue`);
     console.log(`${processing_jobs} jobs processing`);
-    serviceLoop(); }, 5000);
+    serviceLoop();
+  }, 5000);
 }
 
 app.listen(80, () => { console.log("Ready for MD5s..."); serviceLoop(); });

@@ -42,9 +42,10 @@ if no jobs, returns string saying something to that effect
 `GET
 /jobs/complete`
 
-returns JSON array of all completed jobs<br/>
-if you include an optional ?id=12345 parameter it will just return the one job you are looking for<br/>
-if you include an optional ?path=/uriencoded/path/to/file parameter it will return all jobs for that file<br/>
+returns JSON array of all completed jobs with status of "complete" or "failed"<br/>
+"result" contains the checksum or is null if the job failed<br/>
+if you include an optional `?id=12345` parameter it will just return the one job you are looking for<br/>
+if you include an optional `?path=/uriencoded/path/to/file` parameter it will return all jobs for that file<br/>
 bonus: the path can be a folder and it will return all jobs for files at or beneath that folder<br />
 if no completed jobs, returns string saying something to that effect
 

@@ -14,10 +14,21 @@ skips the database and just returns a plaintext hash response (delay might be qu
 /jobs/submit`
 
 `{ secret_key:"security", 
-target:"/regular/path/to/file", 
-type:"md5", 
-data: {"some":"custom json data you want to store against this job"}
+"target" : "/regular/path/to/file"
+"data" : {"some":"custom json data you want to store against this job"}
 }`
+
+OR for multiple items at once (there is a "type" parameter which is assumed as md5 if none specified. md5 is all that is supported for now.)
+
+`
+{
+    secret_key:"security",
+    items: [
+        {"target":"/path/1"},
+        {"target":"/path/2", "data":{"some":"data"}}
+    ]
+}
+`
 
 returns 201 if the job submission is successful<br/>
 returns 500 if the laws of physics refuse to bend that way

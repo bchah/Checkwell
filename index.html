@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<head>
+	<meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9, minimum-scale=0.9, user-scalable=no">
+	<title>Checkwell</title>
+	<link rel="stylesheet" type="text/css" href="./style.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+	<div id='wrapper'>
+	
+	</div>
+</body>
+<script>
+    $.getJSON("./jobs/pending?secret_key=security").then((err, res)=>{
+        $("#wrapper").html(`Result:\n ${JSON.stringify(res)}`);
+    })
+</script>
+</html>

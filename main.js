@@ -7,6 +7,7 @@ const md5File = require('md5-file');
 const e = require("express");
 const app = express();
 const fs = require('fs');
+const cors = require('cors');
 const sqlite3 = require("sqlite3").verbose();
 
 // This'll stop 'em.
@@ -44,6 +45,7 @@ app.use("/", router);
 const coreCount = os.cpus().length || 1;
 let currentJobs = [];
 
+app.use(cors({ origin: '*', methods: ['GET', 'POST'] }));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
@@ -77,19 +79,42 @@ router.post("/jobs/submit", jsonParser, (req, res) => {
     res.send("Sorry!");
     return false;
   }
-  const target = req.body.target;
-  const type = req.body.type || "md5";
-  const data = req.body.data;
+  const items = req.body.items || null;
 
-  let sql = data ? `INSERT INTO jobs (path, type, user_data) VALUES (?, ?, ?)` : `INSERT INTO jobs (path, type) VALUES (?, ?)`;
-  let params = data ? [target, type, JSON.stringify(data)] : [target, type];
+  if (items) {
 
-  db.run(sql, params, err => {
-    if (err) { console.error(err); res.status(500).send({ message: "Database error." }) } else {
-      let message = `Job queued for ${target}`;
-      res.status(201).send({ message: message });
+    for (let i = 0; i < items.length; i++) {
+      const target = items[i].target;
+      const type = items[i].type || "md5";
+      const data = items[i].data;
+      let sql = data ? `INSERT INTO jobs (path, type, user_data) VALUES (?, ?, ?)` : `INSERT INTO jobs (path, type) VALUES (?, ?)`;
+      let params = data ? [target, type, JSON.stringify(data)] : [target, type];
+
+      db.run(sql, params, err => {
+        if (err) { console.error(err); res.status(500).send({ message: "Database error." }) } else {
+        }
+      });
+      if (i == items.length - 1) {
+        res.status(201).send({ message: `Queued ${items.length} jobs` });
+      }
     }
-  });
+
+  } else {
+
+    const target = req.body.target;
+    const type = req.body.type || "md5";
+    const data = req.body.data;
+
+    let sql = data ? `INSERT INTO jobs (path, type, user_data) VALUES (?, ?, ?)` : `INSERT INTO jobs (path, type) VALUES (?, ?)`;
+    let params = data ? [target, type, JSON.stringify(data)] : [target, type];
+
+    db.run(sql, params, err => {
+      if (err) { console.error(err); res.status(500).send({ message: "Database error." }) } else {
+        res.status(201).send({ message: `Job queued for ${target}` });
+      }
+    });
+
+  }
 
 });
 
@@ -99,7 +124,18 @@ router.get("/jobs/complete", (request, response) => {
     return false;
   }
   let completed_jobs = [];
-  db.all(`SELECT * FROM jobs WHERE status = "complete" ORDER BY queue_time DESC`, (err, jobs) => {
+
+  let sql = `SELECT * FROM jobs WHERE status = ? ORDER BY id DESC LIMIT 10000`;
+  let params = ["complete"]
+  if (request.query.id) {
+    sql = `SELECT * FROM jobs WHERE status = ? AND id = ? ORDER BY id DESC LIMIT 10000`;
+    params = ["complete", request.query.id];
+  } else if (request.query.target) {
+    sql = `SELECT * FROM jobs WHERE status = ? AND path LIKE ? ORDER BY id DESC LIMIT 10000`;
+    params = ["complete", `${request.query.target}%`];
+  }
+
+  db.all(sql, params, (err, jobs) => {
     if (err) {
       console.error(err);
     } else {
@@ -107,17 +143,7 @@ router.get("/jobs/complete", (request, response) => {
         completed_jobs = "No completed jobs (yet).";
       } else {
         jobs.forEach(job => {
-          if (request.query.id) {
-            if (job.id == request.query.id) {
-              completed_jobs.push(job);
-            }
-          } else if (request.query.target) {
-            if (job.path.match(request.query.target)) {
-              completed_jobs.push(job);
-            }
-          } else {
-            completed_jobs.push(job);
-          }
+          completed_jobs.push(job);
         });
       }
       response.send(completed_jobs);
@@ -132,7 +158,7 @@ router.get("/jobs/pending", (request, response) => {
     return false;
   }
   let pending_jobs = [];
-  db.all(`SELECT * FROM jobs WHERE status = "pending" ORDER BY queue_time DESC`, (err, jobs) => {
+  db.all(`SELECT * FROM jobs WHERE status = "pending" ORDER BY queue_time DESC LIMIT 10000`, (err, jobs) => {
     if (err) {
       console.error(err);
     } else {
@@ -155,7 +181,7 @@ router.get("/jobs/processing", (request, response) => {
     return false;
   }
   let processing_jobs = [];
-  db.all(`SELECT * FROM jobs WHERE status = 'processing' ORDER BY queue_time DESC`, (err, jobs) => {
+  db.all(`SELECT * FROM jobs WHERE status = 'processing' ORDER BY queue_time DESC LIMIT 10000`, (err, jobs) => {
     if (err) {
       console.error(err);
     } else {
@@ -172,18 +198,24 @@ router.get("/jobs/processing", (request, response) => {
   });
 });
 
-
-
 function serviceLoop() {
+
   let job_slots = coreCount - currentJobs.length;
-  console.log("Running service loop");
-  console.log(niceDate());
-  console.log(`${job_slots} Job Slots Available`);
-  db.all(`SELECT * FROM jobs WHERE status IN ('pending') ORDER BY queue_time DESC LIMIT ${job_slots}`, (err, jobs) => {
+  let pending_jobs = 0;
+  let processing_jobs = 0;
+
+  db.all(`SELECT * FROM jobs WHERE status = 'pending' ORDER BY queue_time DESC LIMIT ${job_slots}`, (err, jobs) => {
     if (err) {
       console.error(err);
     } else {
-      console.log(`${jobs.length} jobs pending`);
+      pending_jobs = jobs.length;
+      db.all(`SELECT * FROM jobs WHERE status = 'processing' ORDER BY queue_time DESC LIMIT 256`, (err, jobs) => {
+        if (err) {
+          console.error(err);
+        } else {
+          processing_jobs = jobs.length;
+        }
+      });
       jobs.forEach(job => {
         if (!currentJobs.find(cJob => { cJob.id == job.id })) {
           currentJobs.push(job);
@@ -205,7 +237,14 @@ function serviceLoop() {
       });
     }
   });
-  setTimeout(() => { serviceLoop() }, 5000);
+  setTimeout(() => {
+    job_slots = coreCount - currentJobs.length;
+    console.log("Running service loop");
+    console.log(niceDate());
+    console.log(`${job_slots} job slots Available`);
+    console.log(`${pending_jobs} jobs in queue`);
+    console.log(`${processing_jobs} jobs processing`);
+    serviceLoop(); }, 5000);
 }
 
 app.listen(80, () => { console.log("Ready for MD5s..."); serviceLoop(); });

@@ -1,6 +1,6 @@
 {
   "name": "checkwell",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Checkwell is an MD5 Checksum server that performs asynchronous checksums via a dead-simple REST API.",
   "main": "main.js",
   "scripts": {

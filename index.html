@@ -1,18 +1,145 @@
 <!DOCTYPE html>
+
 <head>
-	<meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9, minimum-scale=0.9, user-scalable=no">
+	<meta name="viewport"
+		content="width=device-width, initial-scale=0.9, maximum-scale=0.9, minimum-scale=0.9, user-scalable=no">
+	<meta charset="UTF-8">
 	<title>Checkwell</title>
 	<link rel="stylesheet" type="text/css" href="./style.css">
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+	<script src="./jquery-3.6.0.min.js"></script>
 </head>
+
 <body>
 	<div id='wrapper'>
-	
+		<div style="background-color: dimgray;">
+			<h1>&nbsp;Checkwell</h1>
+			<h4>&nbsp;&nbsp;&nbsp;Updated <span id="update_time"></span>&nbsp;<span id="refresh" style="cursor:pointer">🔄</span></h4>
+		</div>
+		<p id="autoToggle" style="cursor:pointer" data="off">Auto refresh is <strong>OFF</strong></p>
+		<div class="row">
+			<div class="column" id="processing">
+				<h2>Processing Jobs</h2>
+			</div>
+			<div class="column" id="queued">
+				<h2>Queued Jobs</h2>
+			</div>
+			<div class="column" id="completed">
+				<h2>Completed Jobs</h2>
+			</div>
+		
+			
+		</div>
 	</div>
 </body>
+
 <script>
-    $.getJSON("./jobs/pending?secret_key=security").then((err, res)=>{
-        $("#wrapper").html(`Result:\n ${JSON.stringify(res)}`);
-    })
+
+	let timeout = null;
+
+	function niceDate() {
+		return new Date().toISOString().slice(0, 19).replace('T', ' ');
+	}
+
+	function refresh() {
+		$.get("./jobs/complete?secret_key=security", (data) => {
+			if (!Array.isArray(data)) {
+				$("#completed").html(`No completed jobs`);
+			} else {
+				$("#completed").html("<h2>Completed Jobs</h2>");
+				data.forEach(item => {
+					$("#completed").append(`
+			<div>
+				<small>
+				<span>Job #${item.id}</span><br>
+				<span>${item.path}</span><br>
+				<span><strong>Queued</strong> ${item.queue_time}</span><br>
+				<span><strong>Status</strong> ${item.status == "complete" ? "<span style='color:green'>Complete</span>" : "<span style='color:red'>Failed</span>"}</span><br>
+				${item.start_time ? `<span><strong>Started</strong> ${item.start_time}</span><br>` : ``}
+				${item.finish_time ? `<span><strong>Finished</strong> ${item.finish_time}</span><br>` : ``}
+				${item.result ? `<span><strong>Result</strong> ==> <span style='color:yellow'>${item.result}</span></span><br>` : ``}
+				${item.user_data ? `<span><strong>User Data</strong> ${JSON.stringify(item.user_data)}<span><br>` : ``}
+				</small>
+				<br><br>
+			</div>
+			`)
+				});
+
+			}
+		});
+
+		$.get("./jobs/pending?secret_key=security", (data) => {
+			if (!Array.isArray(data)) {
+				$("#queued").html(`<h2>Queued Jobs</h2>No queued jobs`);
+			} else {
+				$("#queued").html(`<h2>Queued Jobs</h2>`);
+				data.forEach(item => {
+					$("#queued").append(`
+			<div>
+				<small>
+				<span>Job #${item.id}</span><br>
+				<span>${item.path}</span><br>
+				<span><strong>Queued</strong> ${item.queue_time}</span><br>
+				<span><strong>Status</strong> ${item.status}</span><br>
+				${item.user_data ? `<span><strong>User Data</strong> ${JSON.stringify(item.user_data)}<span><br>` : ``}
+				</small>
+				<br><br>
+			</div>
+			`)
+				});
+			}
+		});
+
+		$.get("./jobs/processing?secret_key=security", (data) => {
+			if (!Array.isArray(data)) {
+				$("#processing").html(`<h2>Processing Jobs</h2>No processing jobs`);
+			} else {
+				$("#processing").html(`<h2>Processing Jobs</h2>`);
+				data.forEach(item => {
+					$("#processing").append(`
+			<div>
+				<small>
+				<span>Job #${item.id}</span><br>
+				<span>${item.path}</span><br>
+				<span><strong>Queued</strong> ${item.queue_time}</span><br>
+				<span><strong>Status</strong> ${item.status == "complete" ? "<span style='color:green'>Complete</span>" : "<span style='color:red'>Failed</span>"}</span><br>
+				${item.start_time ? `<span><strong>Started</strong> ${item.start_time}</span><br>` : ``}
+				${item.user_data ? `<span><strong>User Data</strong> ${JSON.stringify(item.user_data)}<span><br>` : ``}
+				</small>
+				<br><br>
+			</div>
+			`)
+				});
+			}
+		});
+
+		$("#update_time").html(niceDate());
+
+		if (timeout) {
+			setTimeout(()=>{refresh()},timeout);
+		}
+
+	}
+
+	refresh();
+
+	$("#refresh").on("click", () => {
+		refresh();
+	})
+
+	$("#autoToggle").on("click", function(){
+		if ($(this).attr("data") == "off"){
+			$(this).html(`Auto refresh is <strong>ON</strong>`);
+			$(this).attr("data", "on");
+			timeout = 10000;
+			refresh();
+		} else {
+			$(this).html(`Auto refresh is <strong>OFF</strong>`);
+			$(this).attr("data", "off");
+			clearTimeout(timeout);
+			timeout = null;
+		}
+	})
+
 </script>
+
 </html>

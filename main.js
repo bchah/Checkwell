@@ -14,13 +14,12 @@ const sqlite3 = require("sqlite3").verbose();
 const secret_key = process.env.SECRET_KEY || "security";
 const service_port = 80;
 
+let serviceLoopBegan = false;
+let dbHasInitialized = false;
+
 let db = new sqlite3.Database('./data.db', sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, err => {
 
-  if (err) {
-    console.error(err.message);
-  }
-
-  console.log("Initializing Database...");
+  console.log(`${niceDate()} : Initializing Database`);
 
   db.run(`CREATE TABLE IF NOT EXISTS jobs(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,12 +32,14 @@ let db = new sqlite3.Database('./data.db', sqlite3.OPEN_READWRITE | sqlite3.OPEN
     result TEXT,
     user_data TEXT)`);
 
-  console.log("Database ready.");
+  console.log(`${niceDate()} : Database ready, starting service loop.`);
+
+  dbHasInitialized = true;
 
 });
 
 function niceDate() {
-  return new Date().toISOString().slice(0, 19).replace('T', ' ');
+  return new Date().toISOString().slice(0, 23).replace('T', ' ');
 }
 
 app.use("/", router);
@@ -59,6 +60,14 @@ router.get("/", (req, res) => {
 
 router.get("/style.css", (req, res) => {
   fs.createReadStream("./style.css").pipe(res)
+});
+
+router.get("/refresh.svg", (req, res) => {
+  fs.createReadStream("./refresh.svg").pipe(res)
+});
+
+router.get("/jquery-3.6.0.min.js", (req, res) => {
+  fs.createReadStream("./jquery-3.6.0.min.js").pipe(res)
 });
 
 
@@ -203,6 +212,13 @@ router.get("/jobs/processing", (request, response) => {
 
 function serviceLoop() {
 
+  if (!dbHasInitialized) {
+    setTimeout(()=>{serviceLoop()},1000);
+  } else if (!serviceLoopBegan) {
+    console.log(`${niceDate()} : Checkwell is ready for action! Now listening on port ${service_port}`);
+    serviceLoopBegan = true;
+  }
+
   let job_slots = coreCount - currentJobs.length;
   let pending_jobs = 0;
   let processing_jobs = 0;
@@ -212,13 +228,13 @@ function serviceLoop() {
       console.error(err);
     } else {
       pending_jobs = jobs.length;
-      console.log(`${pending_jobs} jobs in queue`);
+      if (pending_jobs > 0) console.log(`${niceDate()} : ${pending_jobs} jobs in queue`);
       db.all(`SELECT * FROM jobs WHERE status = 'processing' ORDER BY queue_time DESC LIMIT 256`, (err, jobs) => {
         if (err) {
           console.error(err);
         } else {
           processing_jobs = jobs.length;
-          console.log(`${processing_jobs} jobs processing`);
+          if (processing_jobs > 0) console.log(`${niceDate()} : ${processing_jobs} jobs processing`);
         }
       });
 
@@ -229,13 +245,13 @@ function serviceLoop() {
             currentJobs = currentJobs.filter(cJob => { cJob.id != job.id });
             return;
           }
-          console.log(`Starting Job ${job.id}: ${job.path}`);
+          console.log(`${niceDate()} : Starting Job ${job.id}: ${job.path}`);
           db.run(`UPDATE jobs SET status = ?, start_time = ? WHERE id = ?`, ["processing", niceDate(), job.id], err => {
             if (err) {
               console.error(err);
             } else {
                 md5File(job.path).then((hash) => {
-                  console.log(`${job.path} ==> ${hash}`);
+                  console.log(`${niceDate()} : Job suceeded for ${job.path}\n${niceDate()} : MD5 ==> ${hash}`);
                   db.run(`UPDATE jobs SET status = ?, result = ?, finish_time = ? WHERE id = ?`, ["complete", hash, niceDate(), job.id], err => {
                     if (err) { console.error(err) };
                     currentJobs = currentJobs.filter(cJob => { cJob.id != job.id });
@@ -243,6 +259,7 @@ function serviceLoop() {
                   
                 }, (err)=>{
                   console.error(err);
+                  console.log(`${niceDate()} : Job failed for ${job.path}`);
                   db.run(`UPDATE jobs SET status = ?, finish_time = ? WHERE id = ?`, ["failed", niceDate(), job.id], err => {
                     if (err) { console.error(err) };
                     currentJobs = currentJobs.filter(cJob => { cJob.id != job.id });
@@ -257,11 +274,9 @@ function serviceLoop() {
 
   setTimeout(() => {
     job_slots = coreCount - currentJobs.length;
-    console.log("Running service loop");
-    console.log(niceDate());
-    console.log(`${job_slots} job slots Available`);
+    if (job_slots < coreCount) console.log(`${niceDate()} : ${job_slots} job slots available`);
     serviceLoop();
   }, 5000);
 }
 
-app.listen(service_port, () => { console.log("Welcome to Checkwell"); serviceLoop(); });
+app.listen(service_port, () => { console.log(`${niceDate()} : Starting Checkwell`); serviceLoop(); });

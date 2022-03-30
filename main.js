@@ -14,8 +14,10 @@ const sqlite3 = require("sqlite3").verbose();
 const secret_key = process.env.SECRET_KEY || "security";
 const service_port = 80;
 
+let timeout = null;
 let serviceLoopBegan = false;
 let dbHasInitialized = false;
+let currentJobs = [];
 
 let db = new sqlite3.Database('./data.db', sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, err => {
 
@@ -45,7 +47,6 @@ function niceDate() {
 app.use("/", router);
 
 const coreCount = os.cpus().length || 1;
-let currentJobs = [];
 
 app.use(cors({ origin: '*', methods: ['GET', 'POST'] }));
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -170,7 +171,7 @@ router.get("/jobs/pending", (request, response) => {
     return false;
   }
   let pending_jobs = [];
-  db.all(`SELECT * FROM jobs WHERE status = "pending" ORDER BY queue_time DESC LIMIT 10000`, (err, jobs) => {
+  db.all(`SELECT * FROM jobs WHERE status = "pending" ORDER BY queue_time ASC LIMIT 10000`, (err, jobs) => {
     if (err) {
       console.error(err);
     } else {
@@ -193,7 +194,7 @@ router.get("/jobs/processing", (request, response) => {
     return false;
   }
   let processing_jobs = [];
-  db.all(`SELECT * FROM jobs WHERE status = 'processing' ORDER BY queue_time DESC LIMIT 10000`, (err, jobs) => {
+  db.all(`SELECT * FROM jobs WHERE status = 'processing' ORDER BY start_time DESC LIMIT 10000`, (err, jobs) => {
     if (err) {
       console.error(err);
     } else {
@@ -213,51 +214,75 @@ router.get("/jobs/processing", (request, response) => {
 function serviceLoop() {
 
   if (!dbHasInitialized) {
-    setTimeout(()=>{serviceLoop()},1000);
+    timeout = setTimeout(() => { serviceLoop() }, 1000);
+    return;
   } else if (!serviceLoopBegan) {
+    clearTimeout(timeout);
+    timeout = null;
+
+    // Check for orphaned processing jobs from last shut down
+    db.all(`SELECT * FROM jobs WHERE status = 'processing' ORDER BY queue_time DESC LIMIT 256`, (err, orphanedJobs) => {
+      if (err) {
+        console.error(err);
+      } else {
+        if (Array.isArray(orphanedJobs) && orphanedJobs.length > 0) {
+          console.log(`${niceDate()} : ${orphanedJobs.length} jobs were processing when Checkwell was last shut down. These jobs will show as failed.`);
+          db.run(`UPDATE jobs SET status = 'failed' WHERE status = 'processing'`, err => {
+            if (err) {
+              console.error(err);
+            }
+          });
+        }
+      }
+    });
+
     console.log(`${niceDate()} : Checkwell is ready for action! Now listening on port ${service_port}`);
     serviceLoopBegan = true;
   }
 
-  let job_slots = coreCount - currentJobs.length;
-  let pending_jobs = 0;
-  let processing_jobs = 0;
+  let job_slots = coreCount;
 
-  db.all(`SELECT * FROM jobs WHERE status = 'pending' ORDER BY queue_time DESC LIMIT ${job_slots}`, (err, jobs) => {
+  db.all(`SELECT * FROM jobs WHERE status = 'pending' ORDER BY queue_time ASC LIMIT 10000`, (err, pendingJobs) => {
     if (err) {
       console.error(err);
     } else {
-      pending_jobs = jobs.length;
-      if (pending_jobs > 0) console.log(`${niceDate()} : ${pending_jobs} jobs in queue`);
-      db.all(`SELECT * FROM jobs WHERE status = 'processing' ORDER BY queue_time DESC LIMIT 256`, (err, jobs) => {
+      if (Array.isArray(pendingJobs) && pendingJobs.length > 0) console.log(`${niceDate()} : ${pendingJobs.length} jobs in queue`);
+      db.all(`SELECT * FROM jobs WHERE status = 'processing' ORDER BY queue_time ASC LIMIT 256`, (err, procJobs) => {
         if (err) {
           console.error(err);
         } else {
-          processing_jobs = jobs.length;
-          if (processing_jobs > 0) console.log(`${niceDate()} : ${processing_jobs} jobs processing`);
-        }
-      });
-
-      jobs.forEach(job => {
-        if (!currentJobs.find(cJob => { cJob.id == job.id })) {
-          if (job.status != "failed") { currentJobs.push(job) }
-          else {
-            currentJobs = currentJobs.filter(cJob => { cJob.id != job.id });
-            return;
+          if (Array.isArray(procJobs) && procJobs.length > 0) { 
+          job_slots = coreCount - procJobs.length;
+          console.log(`${niceDate()} : ${procJobs.length} jobs processing`);
           }
-          console.log(`${niceDate()} : Starting Job ${job.id}: ${job.path}`);
-          db.run(`UPDATE jobs SET status = ?, start_time = ? WHERE id = ?`, ["processing", niceDate(), job.id], err => {
-            if (err) {
-              console.error(err);
+        }
+
+        pendingJobs.forEach(job => {
+          if (!currentJobs.find(cJob => { cJob.id == job.id })) {
+            if (job.status != "failed") {
+              if (job_slots > 0) {
+                currentJobs.push(job)
+                job_slots--;
+              } else {
+                return;
+              }
             } else {
+              currentJobs = currentJobs.filter(cJob => { cJob.id != job.id });
+              return;
+            }
+            console.log(`${niceDate()} : Starting Job ${job.id}: ${job.path}`);
+            db.run(`UPDATE jobs SET status = ?, start_time = ? WHERE id = ?`, ["processing", niceDate(), job.id], err => {
+              if (err) {
+                console.error(err);
+              } else {
                 md5File(job.path).then((hash) => {
                   console.log(`${niceDate()} : Job suceeded for ${job.path}\n${niceDate()} : MD5 ==> ${hash}`);
                   db.run(`UPDATE jobs SET status = ?, result = ?, finish_time = ? WHERE id = ?`, ["complete", hash, niceDate(), job.id], err => {
                     if (err) { console.error(err) };
                     currentJobs = currentJobs.filter(cJob => { cJob.id != job.id });
                   });
-                  
-                }, (err)=>{
+
+                }, (err) => {
                   console.error(err);
                   console.log(`${niceDate()} : Job failed for ${job.path}`);
                   db.run(`UPDATE jobs SET status = ?, finish_time = ? WHERE id = ?`, ["failed", niceDate(), job.id], err => {
@@ -265,16 +290,19 @@ function serviceLoop() {
                     currentJobs = currentJobs.filter(cJob => { cJob.id != job.id });
                   });
                 });
-            }
-          });
-        }
+              }
+            });
+          }
+        });
+
       });
     }
   });
 
-  setTimeout(() => {
-    job_slots = coreCount - currentJobs.length;
-    if (job_slots < coreCount) console.log(`${niceDate()} : ${job_slots} job slots available`);
+  if (job_slots < coreCount) console.log(`${niceDate()} : ${job_slots} job slots available`);
+
+  clearTimeout(timeout);
+  timeout = setTimeout(() => {
     serviceLoop();
   }, 5000);
 }

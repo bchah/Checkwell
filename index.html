@@ -2,7 +2,7 @@
 
 <head>
 	<meta name="viewport"
-		content="width=device-width, initial-scale=0.9, maximum-scale=0.9, minimum-scale=0.9, user-scalable=no">
+		content="width=device-width, initial-scale=0.6, maximum-scale=0.6, minimum-scale=0.6, user-scalable=no">
 	<meta charset="UTF-8">
 	<title>Checkwell</title>
 	<link rel="stylesheet" type="text/css" href="./style.css">
@@ -43,9 +43,9 @@
 	function refresh() {
 		$.get("./jobs/complete?secret_key=security", (data) => {
 			if (!Array.isArray(data)) {
-				$("#completed").html(`No completed jobs`);
+				$("#completed").html(`<h2>Completed Jobs</h2>No completed jobs`);
 			} else {
-				$("#completed").html("<h2>Completed Jobs</h2>");
+				$("#completed").html(`<h2>Completed Jobs (${data.length})</h2>`);
 				data.forEach(item => {
 					$("#completed").append(`
 			<div>
@@ -71,7 +71,7 @@
 			if (!Array.isArray(data)) {
 				$("#queued").html(`<h2>Queued Jobs</h2>No queued jobs`);
 			} else {
-				$("#queued").html(`<h2>Queued Jobs</h2>`);
+				$("#queued").html(`<h2>Queued Jobs (${data.length})</h2>`);
 				data.forEach(item => {
 					$("#queued").append(`
 			<div>
@@ -79,7 +79,6 @@
 				<span>Job #${item.id}</span><br>
 				<span>${item.path}</span><br>
 				<span><strong>Queued</strong> ${item.queue_time}</span><br>
-				<span><strong>Status</strong> ${item.status}</span><br>
 				${item.user_data ? `<span><strong>User Data</strong> ${JSON.stringify(item.user_data)}<span><br>` : ``}
 				</small>
 				<br><br>
@@ -93,15 +92,13 @@
 			if (!Array.isArray(data)) {
 				$("#processing").html(`<h2>Processing Jobs</h2>No processing jobs`);
 			} else {
-				$("#processing").html(`<h2>Processing Jobs</h2>`);
+				$("#processing").html(`<h2>Processing Jobs (${data.length})</h2>`);
 				data.forEach(item => {
 					$("#processing").append(`
 			<div>
 				<small>
 				<span>Job #${item.id}</span><br>
 				<span>${item.path}</span><br>
-				<span><strong>Queued</strong> ${item.queue_time}</span><br>
-				<span><strong>Status</strong> ${item.status == "complete" ? "<span style='color:green'>Complete</span>" : "<span style='color:red'>Failed</span>"}</span><br>
 				${item.start_time ? `<span><strong>Started</strong> ${item.start_time}</span><br>` : ``}
 				${item.user_data ? `<span><strong>User Data</strong> ${JSON.stringify(item.user_data)}<span><br>` : ``}
 				</small>

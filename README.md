@@ -3,7 +3,10 @@ Checkwell is an MD5 Checksum server that performs asynchronous checksums via a d
 
 This must be run from a location where NodeJS can see the paths as they are being fed. Path mapping and more fun stuff to come.
 
-All requests require a secret key which you can set to whatever you'd like in the code (this is v0.0.1 folks.)
+All requests require a secret key which you can set to whatever you'd like in the code or as an environment variable SECRET_KEY.
+
+A rudimentary front-end can be accessed via the web browser. Currently there is a query limit of 10,000 on Processing/Queued/Completed jobs.
+
 
 `GET
 /md5?secret_key=security&target=/uriencoded/path/to/file`

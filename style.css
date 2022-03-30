@@ -4,6 +4,21 @@ a {
     text-decoration: none;
 }
 
+table {
+
+    table-layout:fixed;
+    width:100%;
+    padding: 1em;
+    font-size: small;
+    border-collapse: collapse;
+}
+
+tr {
+    padding: 1em;
+    text-align: center;
+    border-bottom: 0.5px solid white;
+}
+
 img {
     width: 400px;
     border-radius: 6px;
@@ -22,6 +37,8 @@ img {
     border: 1px solid white;
     border-radius: 5px;
     padding:1em;
+    max-height: 600px;
+    overflow-y: scroll;
   }
   
   /* Clear floats after the columns */
@@ -33,7 +50,7 @@ img {
 
   .row{
       display:grid;
-      grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(640px, 1fr));
       gap:1em;
   }
 
@@ -90,20 +107,8 @@ img {
     gap: 1em;
 }
 
-@media screen and (max-width: 600px) {
+@media screen and (max-width: 640px) {
     .column {
       width: 100%;
     }
   }
-
-@media screen and (min-width: 1024px)  {
-
-    .blurb {
-        width:640px;
-    }
-
-    .button-container {
-        grid-template-columns: 0.5fr 0.5fr;
-    }
-    
-}

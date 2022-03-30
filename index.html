@@ -13,56 +13,106 @@
 	<div id='wrapper'>
 		<div style="background-color: dimgray;">
 			<h1>&nbsp;Checkwell</h1>
-			<h4>&nbsp;&nbsp;&nbsp;Updated <span id="update_time"></span>&nbsp;<span id="refresh" style="cursor:pointer">🔄</span></h4>
+			<h4>&nbsp;&nbsp;&nbsp;Updated <span id="update_time"></span>&nbsp;<span id="refresh"
+					style="cursor:pointer">🔄</span></h4>
+			<span id="autoToggle" style="cursor:pointer" data="off">&nbsp;&nbsp;&nbsp;Auto refresh is
+				<strong>OFF</strong></span><br><br>
 		</div>
-		<p id="autoToggle" style="cursor:pointer" data="off">Auto refresh is <strong>OFF</strong></p>
+		<br>
 		<div class="row">
 			<div class="column" id="processing">
 				<h2>Processing Jobs</h2>
+				No processing jobs
 			</div>
 			<div class="column" id="queued">
 				<h2>Queued Jobs</h2>
+				No queued jobs
 			</div>
 			<div class="column" id="completed">
 				<h2>Completed Jobs</h2>
+				No completed jobs
 			</div>
-		
-			
+			<div class="column" id="failed">
+				<h2>Failed Jobs</h2>
+				No failed jobs
+			</div>
+
+
 		</div>
 	</div>
 </body>
 
 <script>
 
-	let timeout = null;
+	let globalTimeout = null;
 
 	function niceDate() {
 		return new Date().toISOString().slice(0, 19).replace('T', ' ');
 	}
 
-	function refresh() {
+	function refresh(timeout) {
+
 		$.get("./jobs/complete?secret_key=security", (data) => {
 			if (!Array.isArray(data)) {
 				$("#completed").html(`<h2>Completed Jobs</h2>No completed jobs`);
+				$("#failed").html(`<h2>Failed Jobs</h2>No failed jobs`);
 			} else {
-				$("#completed").html(`<h2>Completed Jobs (${data.length})</h2>`);
-				data.forEach(item => {
-					$("#completed").append(`
-			<div>
-				<small>
-				<span>Job #${item.id}</span><br>
-				<span>${item.path}</span><br>
-				<span><strong>Queued</strong> ${item.queue_time}</span><br>
-				<span><strong>Status</strong> ${item.status == "complete" ? "<span style='color:green'>Complete</span>" : "<span style='color:red'>Failed</span>"}</span><br>
-				${item.start_time ? `<span><strong>Started</strong> ${item.start_time}</span><br>` : ``}
-				${item.finish_time ? `<span><strong>Finished</strong> ${item.finish_time}</span><br>` : ``}
-				${item.result ? `<span><strong>Result</strong> ==> <span style='color:yellow'>${item.result}</span></span><br>` : ``}
-				${item.user_data ? `<span><strong>User Data</strong> ${JSON.stringify(item.user_data)}<span><br>` : ``}
-				</small>
-				<br><br>
-			</div>
-			`)
-				});
+
+				let completed = data.filter(job => { return job.status == "complete" });
+				let failed = data.filter(job => { return job.status == "failed" });
+				if (completed.length > 0) {
+					$("#completed").html(`<h2>Completed Jobs (${completed.length})</h2>
+				<table id="completed_table">
+					<tr>
+						<th style="width: 5%">Job</th>
+						<th style="width: 35%">File</th>
+						<th style="width: 15%">Queued</th>
+						<th style="width: 15%">Started</th>
+						<th style="width: 15%">Finished</th>
+						<th>Checksum</th>
+					</tr>
+				</table>`);
+
+					completed.forEach(item => {
+						$('#completed_table tr:last').after(`
+					<tr>
+						<td>${item.id}</td>
+						<td>${item.path}</td>
+						<td>${item.queue_time}</td>
+						<td>${item.start_time}</td>
+						<td>${item.finish_time}</td>
+						<td>${item.result}</td>
+					</tr>`);
+
+					});
+
+				}
+
+				if (failed.length > 0) {
+					$("#failed").html(`<h2>Failed Jobs (${failed.length})</h2>
+				<table id="failed_table">
+					<tr>
+						<th style="width: 5%">Job</th>
+						<th style="width: 35%">File</th>
+						<th style="width: 15%">Queued</th>
+						<th style="width: 15%">Started</th>
+						<th style="width: 15%">Failed at</th>
+					</tr>
+				</table>`);
+
+					failed.forEach(item => {
+						$('#failed_table tr:last').after(`
+					<tr>
+						<td>${item.id}</td>
+						<td style="color:red">${item.path}</td>
+						<td>${item.queue_time}</td>
+						<td>${item.start_time}</td>
+						<td>${item.finish_time}</td>
+					</tr>`);
+
+					});
+
+				}
 
 			}
 		});
@@ -71,19 +121,22 @@
 			if (!Array.isArray(data)) {
 				$("#queued").html(`<h2>Queued Jobs</h2>No queued jobs`);
 			} else {
-				$("#queued").html(`<h2>Queued Jobs (${data.length})</h2>`);
+				$("#queued").html(`<h2>Queued Jobs (${data.length})</h2>
+				<table id="queued_table">
+					<tr>
+						<th style="width: 5%">Job</th>
+						<th style="width: 35%">File</th>
+						<th style="width: 15%">Queued</th>
+					</tr>
+				</table>`);
+
 				data.forEach(item => {
-					$("#queued").append(`
-			<div>
-				<small>
-				<span>Job #${item.id}</span><br>
-				<span>${item.path}</span><br>
-				<span><strong>Queued</strong> ${item.queue_time}</span><br>
-				${item.user_data ? `<span><strong>User Data</strong> ${JSON.stringify(item.user_data)}<span><br>` : ``}
-				</small>
-				<br><br>
-			</div>
-			`)
+					$('#queued_table tr:last').after(`
+					<tr>
+						<td>${item.id}</td>
+						<td>${item.path}</td>
+						<td>${item.queue_time}</td>
+					</tr>`);
 				});
 			}
 		});
@@ -92,19 +145,24 @@
 			if (!Array.isArray(data)) {
 				$("#processing").html(`<h2>Processing Jobs</h2>No processing jobs`);
 			} else {
-				$("#processing").html(`<h2>Processing Jobs (${data.length})</h2>`);
+				$("#processing").html(`<h2>Processing Jobs (${data.length})</h2>
+				<table id="processing_table">
+					<tr>
+						<th style="width: 5%">Job</th>
+						<th style="width: 35%">File</th>
+						<th>Queued</th>
+						<th>Started</th>
+					</tr>
+				</table>`);
+
 				data.forEach(item => {
-					$("#processing").append(`
-			<div>
-				<small>
-				<span>Job #${item.id}</span><br>
-				<span>${item.path}</span><br>
-				${item.start_time ? `<span><strong>Started</strong> ${item.start_time}</span><br>` : ``}
-				${item.user_data ? `<span><strong>User Data</strong> ${JSON.stringify(item.user_data)}<span><br>` : ``}
-				</small>
-				<br><br>
-			</div>
-			`)
+					$('#processing_table tr:last').after(`
+					<tr>
+						<td>${item.id}</td>
+						<td>${item.path}</td>
+						<td>${item.queue_time}</td>
+						<td>${item.start_time}</td>
+					</tr>`);
 				});
 			}
 		});
@@ -112,7 +170,8 @@
 		$("#update_time").html(niceDate());
 
 		if (timeout) {
-			setTimeout(()=>{refresh()},timeout);
+			clearTimeout(globalTimeout);
+			globalTimeout = setTimeout(() => { refresh(true) }, 10000);
 		}
 
 	}
@@ -123,17 +182,19 @@
 		refresh();
 	})
 
-	$("#autoToggle").on("click", function(){
-		if ($(this).attr("data") == "off"){
-			$(this).html(`Auto refresh is <strong>ON</strong>`);
+	$("#autoToggle").on("click", function () {
+		if ($(this).attr("data") == "off") {
+			$(this).html(`&nbsp;&nbsp;&nbsp;Auto refresh is <strong>ON</strong>`);
 			$(this).attr("data", "on");
-			timeout = 10000;
-			refresh();
+			$("#refresh").hide();
+			clearTimeout(globalTimeout);
+			refresh(true);
 		} else {
-			$(this).html(`Auto refresh is <strong>OFF</strong>`);
+			$(this).html(`&nbsp;&nbsp;&nbsp;Auto refresh is <strong>OFF</strong>`);
 			$(this).attr("data", "off");
-			clearTimeout(timeout);
-			timeout = null;
+			$("#refresh").show();
+			clearTimeout(globalTimeout);
+			refresh(false);
 		}
 	})
 

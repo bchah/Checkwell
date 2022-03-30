@@ -304,7 +304,7 @@ function serviceLoop() {
   clearTimeout(timeout);
   timeout = setTimeout(() => {
     serviceLoop();
-  }, 5000);
+  }, 1000);
 }
 
 app.listen(service_port, () => { console.log(`${niceDate()} : Starting Checkwell`); serviceLoop(); });
